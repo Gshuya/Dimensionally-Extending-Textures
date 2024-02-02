@@ -8,6 +8,8 @@ import cv2
 import torchvision.transforms as transforms
 import torch.optim as optim
 import torch.autograd as autograd
+#from torch.autograd import profiler
+from torch.utils.tensorboard import SummaryWriter
 
 
 #import configuration
@@ -74,6 +76,7 @@ def get_batch_imgs(img):
     return img_batch
 
 
+
 """Training"""
 def train():
     #model to device GPU
@@ -106,59 +109,83 @@ def train():
     sampler.to(device)
     discriminator.to(device)
 
+    # Create a SummaryWriter
+    writer = SummaryWriter(log_dir='logs/gan_debug')
+
     # Training loop
     for epoch in range(cfg.epoch):
-        """
-        Train discriminator
-        """
+
+        try:
+            """
+            Train discriminator
+            """
+            d_optimizer.zero_grad()
+
+            # Get random slicing matrices
+            slicing_matrix_ph = get_random_slicing_matrices(cfg.batch_size, random=cfg.random) #[16,4,4]
+            slicing_matrix_ph = torch.from_numpy(slicing_matrix_ph).float()
+
+            # single slice [4, img_size^2]
+            coords = meshgrid2D(cfg.img_size, cfg.img_size) 
+            # bs different random slices [bs, img_size^2]
+            coords = torch.matmul(slicing_matrix_ph, coords) # [16, 4, 4] * [4, 4, 16384] = [16, 4, 16384]
+            # drop homogeneous coordinate
+            coords = coords[:, :3, :]   
+            coords = coords.to(device)
+            print("coords.shape:", coords.shape)
+
+            # with profiler.profile(record_shapes=True) as prof:
+            #     with profiler.record_function("discriminator_forward"):
+
+            # Generate fake images
+            fake_img = sampler(coords)
+                
+            # Get logits
+            logits_real, hiddenL_real = discriminator(real_batch)
+            logits_fake, hiddenL_fake = discriminator(fake_img)
+
+            # Compute the Discriminator loss 
+            d_org_loss = torch.mean(logits_fake) - torch.mean(logits_real)
+            gp = gradient_penalty(real_batch, fake_img, discriminator)
+            d_loss = d_org_loss + cfg.lambda_gp * gp    # + 0.001 * torch.pow(logits_real, 2)
+
+            # with profiler.record_function("discriminator_backward"):
+            d_loss.backward()
+            d_optimizer.step()
+
             
-        # Get random slicing matrices
-        slicing_matrix_ph = get_random_slicing_matrices(cfg.batch_size, random=cfg.random) #[16,4,4]
-        slicing_matrix_ph = torch.from_numpy(slicing_matrix_ph).float()
+            """
+            Train generator
+            """
+            g_optimizer.zero_grad()
+        
+            # with profiler.record_function("generator_forward"):
 
-        # single slice [4, img_size^2]
-        coords = meshgrid2D(cfg.img_size, cfg.img_size) 
-        # bs different random slices [bs, img_size^2]
-        coords = torch.matmul(slicing_matrix_ph, coords) # [16, 4, 4] * [4, 4, 16384] = [16, 4, 16384]
-        # drop homogeneous coordinate
-        coords = coords[:, :3, :]   
-        coords = coords.to(device)
-        print("coords.shape:", coords.shape)
-
-        # Generate fake images
-        fake_img = sampler(coords)
+            logits_real, hiddenL_real = discriminator(real_batch)
+            logits_fake, hiddenL_fake = discriminator(fake_img)
             
-        # Get logits
-        logits_real, hiddenL_real = discriminator(real_batch)
-        logits_fake, hiddenL_fake = discriminator(fake_img.detach())
-        
+            # Compute the generator loss
+            if cfg.alpha < 0 and cfg.beta < 0:
+                raise Exception("oops, must do either alpha or beta > 0!")
+            
+            g_gan_loss = -torch.mean(logits_fake)
+            g_style_loss = style_loss(hiddenL_real, hiddenL_fake)
+            
+            g_loss = cfg.alpha * g_gan_loss + cfg.beta * g_style_loss
 
-        # Compute the Discriminator loss 
-        d_org_loss = torch.mean(logits_fake) - torch.mean(logits_real)
-        gp = gradient_penalty(real_batch, fake_img, discriminator)
-        d_loss = d_org_loss + cfg.lambda_gp * gp    # + 0.001 * torch.pow(logits_real, 2)
+            # with profiler.record_function("generator_backward"):
+            g_loss.backward(retain_graph=True)
+            g_optimizer.step()
 
-        d_optimizer.zero_grad() 
-        d_loss.backward()
-        d_optimizer.step()
+        except Exception as e:
+            # Log the exception message to TensorBoard
+            writer.add_text('Exception', str(e), global_step=(epoch))
+            # Visualize the computation graph
+            writer.add_graph(sampler, input_to_model=coords)
+            writer.add_graph(discriminator, input_to_model=fake_img)
 
-        
-        """
-        Train generator
-        """
-        
-        # Compute the generator loss
-        if cfg.alpha < 0 and cfg.beta < 0:
-            raise Exception("oops, must do either alpha or beta > 0!")
-        
-        g_gan_loss = -torch.mean(logits_fake)
-        g_style_loss = style_loss(hiddenL_real, hiddenL_fake)
-        
-        g_loss = cfg.alpha * g_gan_loss + cfg.beta * g_style_loss
-
-        g_optimizer.zero_grad()
-        g_loss.backward()
-        g_optimizer.step()
+        # Print the profiler results
+        # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
         print(f"Epoch_{epoch}, Generator Loss: {g_loss.item():.4f}, Discriminator Loss: {d_loss.item():.4f}")
 
@@ -172,6 +199,8 @@ def train():
                 'discriminator_optimizer_state_dict': d_optimizer.state_dict(),
             }, f'{cfg.chpt_path}checkpoint_epoch_{epoch + 1}.pt')
 
+    # Close the SummaryWriter
+    writer.close()
     # Save the final trained model
     torch.save({
         'epoch': cfg.epoch,
@@ -180,6 +209,7 @@ def train():
         'generator_optimizer_state_dict': g_optimizer.state_dict(),
         'discriminator_optimizer_state_dict': d_optimizer.state_dict(),
     }, f'{cfg.chpt_path}final_model.pt')
+
 
 
 ################################
