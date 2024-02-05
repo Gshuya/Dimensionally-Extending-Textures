@@ -59,7 +59,7 @@ def sample_trilinear(noise, coords, img_h=128, img_w=128):
 
     #noise = torch.reshape(noise, [n_octaves, noise_res**3])
     noise = torch.reshape(noise, [n_octaves, noise_res**3])
-    print("noise.shape:",noise.shape)
+    #print("noise.shape:",noise.shape)
 
     idx_x0_y0_z0 = ((x0 * noise_res**2 + y0 * noise_res + z0) % noise.shape[1]).long()
     idx_x0_y0_z1 = ((x0 * noise_res**2 + y0 * noise_res + z1) % noise.shape[1]).long()
@@ -162,18 +162,17 @@ class Sampler(torch.nn.Module):
 
     """
     MLP that maps 3D coordinate to an rgb texture value
-    :param noise_cube: noise, same foreach sample in batch [n_octaves, noise_res, noise_res, noise_res]
-    :param coords: xyz coords of slices to synthesize [bs, 3, img_size^2)
-    :param transformations: octave transformations [bs, n_octaves, 3, 3]
+    noise_cube: noise, same foreach sample in batch [n_octaves, noise_res, noise_res, noise_res]
+    coords: xyz coords of slices to synthesize [bs, 3, img_size^2)
+    transformations: octave transformations [bs, n_octaves, 3, 3]
     :param img_size: training patch size
     :param img_h: height of output image (for inference)
     :param img_w: width of output image (for inference)
     :param hidden_dim: number of neurons in dense layers
-    :param eq_lr: whether to use equalized learning rate
     :return: rgb image
     """
 
-    def __init__(self, img_size=128, img_h=None, img_w=None, hidden_dim=128, noise_resolution=64, n_octaves=16, batch_size = 16):
+    def __init__(self, img_size=128, img_h=None, img_w=None, hidden_dim=128, n_octaves=16, batch_size = 16):
         super(Sampler, self).__init__()
 
         # Image size
@@ -186,13 +185,10 @@ class Sampler(torch.nn.Module):
         if self.img_w is None:
             self.img_w = self.img_size
         
-
         self.n_octaves = n_octaves
-        self.noise_resolution = noise_resolution
 
         # Define constant input layer 
-        self.base = nn.Parameter(nn.init.constant_(torch.empty(1, 1, 1, hidden_dim), 1))
-        self.noise_cube = torch.randn([n_octaves, noise_resolution, noise_resolution, noise_resolution], requires_grad=False)
+        self.base = nn.Parameter(torch.ones(1, hidden_dim, 1, 1))
 
         # Define transformation to learn n noise frequencies
        
@@ -200,7 +196,7 @@ class Sampler(torch.nn.Module):
             """Returns octave transformations"""
             trans = torch.randn(n_octaves, 3, 3)
             trans.unsqueeze(0) 
-            trans = trans.repeat(batch_size, 1, 1, 1) # broadcast to entire batch
+            trans = trans.repeat(batch_size, 1, 1, 1) # broadcast to entire batch [bs, n_octaves, 3, 3]
 
             oct_factors = torch.zeros((n_octaves, 3, 3), dtype=torch.float32)
             for i in range(n_octaves):
@@ -230,19 +226,29 @@ class Sampler(torch.nn.Module):
         self.noise3 = add_noise(3, hidden_dim, n_octaves)
         self.relu = nn.LeakyReLU(0.2, inplace=True)
 
-    def forward(self, coords):
+    def forward(self,coords, noise_cube):
         # broadcast (constant per pixel and per sample)
         BatchSize = coords.shape[0]
-        base = self.base.repeat(BatchSize, self.img_h, self.img_w, 1)
-
+        base = self.base.expand(BatchSize, -1, self.img_h, self.img_w)
+        base.retain_grad()
+        # print(base.shape)
+       
         # obtain octave sampling coordinates by transforming slice coordinates with octave matrices
         coords = torch.unsqueeze(coords, 1)  # coords: [bs, 3, img_size^2]
         coords = coords.repeat(1, self.n_octaves, 1, 1) # broadcast (same input coords foreach octave)
         octave_coords = torch.matmul(self.transformations, coords) # A distinct set of coordinates foreach batch and octave
-        sampled_noise = sample_trilinear(self.noise_cube, octave_coords, img_h=self.img_h, img_w=self.img_w)
+        #To set requires_grad=True
+        octave_coords.requires_grad_()
+        octave_coords.retain_grad()
+        # print("octave_coords.shape",octave_coords.shape)
+        sampled_noise = sample_trilinear(noise_cube, octave_coords, img_h=self.img_h, img_w=self.img_w)
+        sampled_noise.requires_grad_()
+        sampled_noise.retain_grad()
+        # print("sampled_noise.shape",sampled_noise.shape)
        
         #trainable layers
         l0 = self.conv0(base)
+        # print("l0.shape",l0.shape)
         l0 = self.noise0(l0, sampled_noise)
         l0 = self.relu(l0)
 
