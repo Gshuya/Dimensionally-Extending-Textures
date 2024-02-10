@@ -3,8 +3,3 @@ torchvision
 opencv-python
 numpy
 
-# matplotlib
-# scipy
-# pillow
-# urllib3
-# scikit-image

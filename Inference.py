@@ -29,10 +29,8 @@ def inference():
     checkpoint = torch.load(cfg.model_name)
     epoch = checkpoint['epoch']
     sampler.load_state_dict(checkpoint['generator_state_dict'])
-    print('loaded model from: ' + cfg.model_name)
+    # print('loaded model from: ' + cfg.model_name)
     sampler.to(device)
-
-    
     for i in range(cfg.num_samples):
         # get random noise
         slicing_matrix_ph = get_random_slicing_matrices(16, random=cfg.random) # single slice [1, 4, 4]
@@ -41,11 +39,11 @@ def inference():
         coords = torch.matmul(slicing_matrix_ph, coords) # [1, 4, img_h*img_w]
         coords = coords[:, :3, :]   
         coords = coords.to(device)
-        print("coords.shape:", coords.shape)
+        # print("coords.shape:", coords.shape)
         noise_cube = torch.randn([cfg.n_octaves, cfg.noise_resolution, cfg.noise_resolution, cfg.noise_resolution])
       
         imgs = sampler(coords,noise_cube)
-        print(imgs.shape)
+        # print(imgs.shape)
 
 
         save_image(imgs, cfg.out_path + str(i+1) + '.png')

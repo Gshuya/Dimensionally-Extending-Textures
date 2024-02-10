@@ -107,13 +107,10 @@ def train():
     sampler.to(device)
     discriminator.to(device)
 
-    # Create a SummaryWriter
-    writer = SummaryWriter(log_dir='./logs/gan_debug')
 
     # Training loop
     for epoch in range(cfg.epoch):
-
-        #try:
+         
         """
         Train discriminator
         """
@@ -149,13 +146,13 @@ def train():
         d_loss = d_org_loss + cfg.lambda_gp * gp    # + 0.001 * torch.pow(logits_real, 2)
 
 
-        d_loss.backward()
+        d_loss.backward(retain_graph=True)
         d_optimizer.step()
 
-        writer.add_graph(sampler, input_to_model=[coords, noise_cube])
-        writer.add_graph(discriminator, input_to_model=fake_img)
+        #writer.add_graph(sampler, input_to_model=[coords, noise_cube])
+        #writer.add_graph(discriminator, input_to_model=fake_img)
 
-
+        
 
         """
         Train generator
@@ -178,11 +175,6 @@ def train():
         g_loss.backward()
         g_optimizer.step()
 
-    # except Exception as e:
-    #     # Log the exception message to TensorBoard
-    #     writer.add_text('Exception', str(e), global_step=(epoch))
-        # Visualize the computation graph
-
 
 
         print(f"Epoch_{epoch}, Generator Loss: {g_loss.item():.4f}, Discriminator Loss: {d_loss.item():.4f}")
@@ -197,8 +189,7 @@ def train():
                 'discriminator_optimizer_state_dict': d_optimizer.state_dict(),
             }, f'{cfg.chpt_path}checkpoint_epoch_{epoch + 1}.pt')
 
-    # Close the SummaryWriter
-    writer.close()
+
     # Save the final trained model
     torch.save({
         'epoch': cfg.epoch,

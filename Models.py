@@ -237,13 +237,13 @@ class Sampler(torch.nn.Module):
         coords = torch.unsqueeze(coords, 1)  # coords: [bs, 3, img_size^2]
         coords = coords.repeat(1, self.n_octaves, 1, 1) # broadcast (same input coords foreach octave)
         octave_coords = torch.matmul(self.transformations, coords) # A distinct set of coordinates foreach batch and octave
-        #To set requires_grad=True
-        octave_coords.requires_grad_()
-        octave_coords.retain_grad()
+        # To set requires_grad=True
+        # octave_coords.requires_grad_()
+        # octave_coords.retain_grad()
         # print("octave_coords.shape",octave_coords.shape)
         sampled_noise = sample_trilinear(noise_cube, octave_coords, img_h=self.img_h, img_w=self.img_w)
-        sampled_noise.requires_grad_()
-        sampled_noise.retain_grad()
+        # sampled_noise.requires_grad_()
+        # sampled_noise.retain_grad()
         # print("sampled_noise.shape",sampled_noise.shape)
        
         #trainable layers
