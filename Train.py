@@ -107,6 +107,19 @@ def train():
     sampler.to(device)
     discriminator.to(device)
 
+    # # Load checkpoint
+    # checkpoint = torch.load(cfg.chpt)
+
+    # # Load generator and discriminator states
+    # sampler.load_state_dict(checkpoint['generator_state_dict'])
+    # discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
+
+    # # Load optimizer states
+    # g_optimizer.load_state_dict(checkpoint['generator_optimizer_state_dict'])
+    # d_optimizer.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
+
+    # epoch_chpt = checkpoint['epoch']
+
 
     # Training loop
     for epoch in range(cfg.epoch):
@@ -143,7 +156,9 @@ def train():
         # Compute the Discriminator loss 
         d_org_loss = torch.mean(logits_fake) - torch.mean(logits_real)
         gp = gradient_penalty(real_batch, fake_img, discriminator)
-        d_loss = d_org_loss + cfg.lambda_gp * gp    # + 0.001 * torch.pow(logits_real, 2)
+        # real = 0.001 * torch.mean(logits_real)**2
+        
+        d_loss = d_org_loss + cfg.lambda_gp * gp
 
 
         d_loss.backward(retain_graph=True)
@@ -175,29 +190,31 @@ def train():
         g_loss.backward()
         g_optimizer.step()
 
-
-
-        print(f"Epoch_{epoch}, Generator Loss: {g_loss.item():.4f}, Discriminator Loss: {d_loss.item():.4f}")
+        tot_epoch = epoch #+epoch_chpt
+        # Print the losses
+        print(f"Epoch_{tot_epoch+1}, Generator Loss: {g_loss.item():.4f}, Discriminator Loss: {d_loss.item():.4f}")
 
         # Save the model at desired intervals
         if (epoch + 1) % 50 == 0:
             torch.save({
-                'epoch': epoch,
+                'epoch': tot_epoch+1,
                 'generator_state_dict': sampler.state_dict(),
                 'discriminator_state_dict': discriminator.state_dict(),
                 'generator_optimizer_state_dict': g_optimizer.state_dict(),
                 'discriminator_optimizer_state_dict': d_optimizer.state_dict(),
-            }, f'{cfg.chpt_path}checkpoint_epoch_{epoch + 1}.pt')
+            }, f'{cfg.chpt_path}checkpoint_epoch_{tot_epoch + 1}.pt')
 
+    Final_epoch = cfg.epoch#+epoch_chpt
 
     # Save the final trained model
     torch.save({
-        'epoch': cfg.epoch,
+        'epoch': Final_epoch,
         'generator_state_dict': sampler.state_dict(),
         'discriminator_state_dict': discriminator.state_dict(),
         'generator_optimizer_state_dict': g_optimizer.state_dict(),
         'discriminator_optimizer_state_dict': d_optimizer.state_dict(),
     }, f'{cfg.chpt_path}final_model.pt')
+    print('model saved')
 
 
 
