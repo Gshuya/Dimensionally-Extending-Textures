@@ -1,2 +1,5 @@
-tf/*
 /**/__pycache__/*
+/.gitignore
+/chpts/*
+/outputs/*
+``` 

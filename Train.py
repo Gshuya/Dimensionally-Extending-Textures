@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 import torch.optim as optim
 import torch.autograd as autograd
 #from torch.autograd import profiler
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
 
 #import configuration
@@ -81,6 +81,7 @@ def get_batch_imgs(img):
 def train():
     #model to device GPU
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+  
 
     # load training exemplar
     training_img = cv2.imread(cfg.training_exemplar).astype(np.float32) / 255.  #normalized to [0,1]
@@ -143,6 +144,7 @@ def train():
         # print("coords.shape:", coords.shape)
 
         noise_cube = torch.randn([cfg.n_octaves, cfg.noise_resolution, cfg.noise_resolution, cfg.noise_resolution])
+        noise_cube = noise_cube.to(device)
 
 
         # Generate fake images
@@ -195,7 +197,7 @@ def train():
         print(f"Epoch_{tot_epoch+1}, Generator Loss: {g_loss.item():.4f}, Discriminator Loss: {d_loss.item():.4f}")
 
         # Save the model at desired intervals
-        if (epoch + 1) % 50 == 0:
+        if (epoch + 1) % 1000 == 0:
             torch.save({
                 'epoch': tot_epoch+1,
                 'generator_state_dict': sampler.state_dict(),
