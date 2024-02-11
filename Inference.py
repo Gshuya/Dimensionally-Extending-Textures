@@ -41,6 +41,7 @@ def inference():
         coords = coords.to(device)
         # print("coords.shape:", coords.shape)
         noise_cube = torch.randn([cfg.n_octaves, cfg.noise_resolution, cfg.noise_resolution, cfg.noise_resolution])
+        noise_cube = noise_cube.to(device)
       
         imgs = sampler(coords,noise_cube)
         # print(imgs.shape)
