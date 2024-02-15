@@ -23,17 +23,19 @@ def inference():
         print("setting seed for reproducibility to " + str(cfg.seed))
 
     # Instantiate the generator
-    sampler = Models.Sampler(img_size=cfg.img_size, img_h=cfg.img_h, img_w=cfg.img_w, hidden_dim=cfg.hidden_dim, n_octaves=cfg.n_octaves, batch_size = cfg.batch_size)
+    sampler = Models.Sampler(img_size=cfg.img_size, img_h=cfg.img_h, img_w=cfg.img_w, hidden_dim=cfg.hidden_dim, n_octaves=cfg.n_octaves)
    
     # Load the saved model
     checkpoint = torch.load(cfg.model_name)
-    epoch = checkpoint['epoch']
+    # epoch = checkpoint['epoch']
     sampler.load_state_dict(checkpoint['generator_state_dict'])
     # print('loaded model from: ' + cfg.model_name)
     sampler.to(device)
+
+    # Generate samples
     for i in range(cfg.num_samples):
         # get random noise
-        slicing_matrix_ph = get_random_slicing_matrices(16, random=cfg.random) # single slice [1, 4, 4]
+        slicing_matrix_ph = get_random_slicing_matrices(1, random=cfg.random) # single slice [1, 4, 4]
         slicing_matrix_ph = torch.from_numpy(slicing_matrix_ph).float()
         coords = meshgrid2D(cfg.img_h, cfg.img_w)  # [4, img_h*img_w]
         coords = torch.matmul(slicing_matrix_ph, coords) # [1, 4, img_h*img_w]
@@ -46,9 +48,8 @@ def inference():
         imgs = sampler(coords,noise_cube)
         # print(imgs.shape)
 
-
         save_image(imgs, cfg.out_path + str(i+1) + '.png')
+        print('Image saved')
   
-
 ################################
 inference()

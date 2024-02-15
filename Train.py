@@ -4,16 +4,30 @@ import Config
 
 import torch
 import numpy as np
-import cv2
+from PIL import Image
 import torchvision.transforms as transforms
 import torch.optim as optim
 import torch.autograd as autograd
 #from torch.autograd import profiler
-# from torch.utils.tensorboard import SummaryWriter
-
+import wandb
 
 #import configuration
 cfg = Config.Config()
+
+
+# start a new wandb run to track this script
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="DL_Texture3D",
+    
+    # track hyperparameters and run metadata
+    config={
+    "architecture": "GAN",
+    "dataset": "wood",
+    "DiscriminatorUpdates": "5",
+    "epochs": 35000-40000,
+    }
+)
 
 
 def gradient_penalty(real_images, fake_images, discriminator):
@@ -67,8 +81,8 @@ def get_batch_imgs(img):
     for i in range(cfg.batch_size):
         transform = transforms.Compose([
             transforms.RandomCrop((cfg.img_size, cfg.img_size), pad_if_needed=True),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
+            transforms.ToTensor(),
+            # transforms.Normalize([0.5], [0.5]) #normalized to [-1,1]
         ])
         img_crop = transform(img)
         img_batch.append(torch.unsqueeze(img_crop, 0))
@@ -83,20 +97,22 @@ def train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
   
 
-    # load training exemplar
-    training_img = cv2.imread(cfg.training_exemplar).astype(np.float32) / 255.  #normalized to [0,1]
-    training_img = cv2.cvtColor(training_img, cv2.COLOR_BGR2RGB)
-    #print('training_img.shape:', training_img.shape)
-    training_img = np.transpose(training_img, [2, 0, 1])
-    # convert to tensor
-    training_img = torch.from_numpy(training_img)
-    #print('training_img.shape:', training_img.shape)
+    # # load training exemplar
+    # training_img = cv2.imread(cfg.training_exemplar).astype(np.float32) / 255.  #normalized to [0,1]
+    # training_img = cv2.cvtColor(training_img, cv2.COLOR_BGR2RGB)
+    # #print('training_img.shape:', training_img.shape)
+    # training_img = np.transpose(training_img, [2, 0, 1])
+    # # convert to tensor
+    # training_img = torch.from_numpy(training_img)
+    # #print('training_img.shape:', training_img.shape)
+
+    training_img = Image.open(cfg.training_exemplar, mode='r').convert('RGB')
     real_batch = get_batch_imgs(training_img).to(device)
     # print('real_batch.shape:', real_batch.shape) # [16, 3, 128, 128]
    
 
     # Initialize the models
-    sampler = Models.Sampler(img_size=cfg.img_size, hidden_dim=cfg.hidden_dim, n_octaves=cfg.n_octaves, batch_size = cfg.batch_size)
+    sampler = Models.Sampler(img_size=cfg.img_size, hidden_dim=cfg.hidden_dim, n_octaves=cfg.n_octaves)
     discriminator = Models.Discriminator(real_batch.shape)
 
 
@@ -108,74 +124,77 @@ def train():
     sampler.to(device)
     discriminator.to(device)
 
-    # # Load checkpoint
-    # checkpoint = torch.load(cfg.chpt)
+    # Load checkpoint
+    checkpoint = torch.load(cfg.chpt)
 
-    # # Load generator and discriminator states
-    # sampler.load_state_dict(checkpoint['generator_state_dict'])
-    # discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
+    # Load generator and discriminator states
+    sampler.load_state_dict(checkpoint['generator_state_dict'])
+    discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
 
-    # # Load optimizer states
-    # g_optimizer.load_state_dict(checkpoint['generator_optimizer_state_dict'])
-    # d_optimizer.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
+    # Load optimizer states
+    g_optimizer.load_state_dict(checkpoint['generator_optimizer_state_dict'])
+    d_optimizer.load_state_dict(checkpoint['discriminator_optimizer_state_dict'])
 
-    # epoch_chpt = checkpoint['epoch']
+    epoch_chpt = checkpoint['epoch']
 
-
+    
     # Training loop
     for epoch in range(cfg.epoch):
          
         """
         Train discriminator
         """
-        d_optimizer.zero_grad()
 
-        # Get random slicing matrices
-        slicing_matrix_ph = get_random_slicing_matrices(cfg.batch_size, random=cfg.random) #[16,4,4]
-        slicing_matrix_ph = torch.from_numpy(slicing_matrix_ph).float()
+        for _ in range(cfg.DperG):
 
-        # single slice [4, img_size^2]
-        coords = meshgrid2D(cfg.img_size, cfg.img_size) 
-        # bs different random slices [bs, img_size^2]
-        coords = torch.matmul(slicing_matrix_ph, coords) # [16, 4, 4] * [4, 4, 16384] = [16, 4, 16384]
-        # drop homogeneous coordinate
-        coords = coords[:, :3, :]   
-        coords = coords.to(device)
-        # print("coords.shape:", coords.shape)
+            d_optimizer.zero_grad()
 
-        noise_cube = torch.randn([cfg.n_octaves, cfg.noise_resolution, cfg.noise_resolution, cfg.noise_resolution])
-        noise_cube = noise_cube.to(device)
+            # Get random slicing matrices
+            slicing_matrix_ph = get_random_slicing_matrices(cfg.batch_size, random=cfg.random) #[16,4,4]
+            slicing_matrix_ph = torch.from_numpy(slicing_matrix_ph).float()
+
+            # single slice [4, img_size^2]
+            coords = meshgrid2D(cfg.img_size, cfg.img_size) 
+            # bs different random slices [bs, img_size^2]
+            coords = torch.matmul(slicing_matrix_ph, coords) # [16, 4, 4] * [4, 4, 16384] = [16, 4, 16384]
+            # drop homogeneous coordinate
+            coords = coords[:, :3, :]   
+            coords = coords.to(device)
+            # print("coords.shape:", coords.shape)
+
+            noise_cube = torch.randn([cfg.n_octaves, cfg.noise_resolution, cfg.noise_resolution, cfg.noise_resolution])
+            noise_cube = noise_cube.to(device)
 
 
-        # Generate fake images
-        fake_img = sampler(coords, noise_cube)
-    
+            # Generate fake images
+            fake_img = sampler(coords, noise_cube)
+        
+                
+            # Get logits
+            logits_real, hiddenL_real = discriminator(real_batch)
+            logits_fake, hiddenL_fake = discriminator(fake_img)
+
+            # Compute the Discriminator loss 
+            d_org_loss = torch.mean(logits_fake) - torch.mean(logits_real)
+            gp = gradient_penalty(real_batch, fake_img, discriminator)
+            # real = 0.001 * torch.mean(logits_real)**2
             
-        # Get logits
-        logits_real, hiddenL_real = discriminator(real_batch)
-        logits_fake, hiddenL_fake = discriminator(fake_img)
-
-        # Compute the Discriminator loss 
-        d_org_loss = torch.mean(logits_fake) - torch.mean(logits_real)
-        gp = gradient_penalty(real_batch, fake_img, discriminator)
-        # real = 0.001 * torch.mean(logits_real)**2
-        
-        d_loss = d_org_loss + cfg.lambda_gp * gp
+            d_loss = d_org_loss + cfg.lambda_gp * gp
 
 
-        d_loss.backward(retain_graph=True)
-        d_optimizer.step()
-
-        #writer.add_graph(sampler, input_to_model=[coords, noise_cube])
-        #writer.add_graph(discriminator, input_to_model=fake_img)
+            d_loss.backward()
+            d_optimizer.step()
 
         
-
         """
         Train generator
         """
         g_optimizer.zero_grad()
-    
+
+        
+        # Generate fake images
+        fake_img = sampler(coords, noise_cube)
+
         logits_real, hiddenL_real = discriminator(real_batch)
         logits_fake, hiddenL_fake = discriminator(fake_img)
 
@@ -192,12 +211,17 @@ def train():
         g_loss.backward()
         g_optimizer.step()
 
-        tot_epoch = epoch #+epoch_chpt
+        tot_epoch = epoch + epoch_chpt
         # Print the losses
-        print(f"Epoch_{tot_epoch+1}, Generator Loss: {g_loss.item():.4f}, Discriminator Loss: {d_loss.item():.4f}")
+        print(f"Epoch_{tot_epoch+1}, Generator Loss: {g_loss:.4f}, Discriminator Loss: {d_loss:.4f}")
+
+        # Log the losses
+        wandb.log({"Generator Loss": g_loss, "Discriminator Loss": d_loss})
+        # Log the weights
+        wandb.log({"Generator Weights": sampler.state_dict(), "Discriminator Weights": discriminator.state_dict()})
 
         # Save the model at desired intervals
-        if (epoch + 1) % 1000 == 0:
+        if (epoch + 1) % 5000 == 0:
             torch.save({
                 'epoch': tot_epoch+1,
                 'generator_state_dict': sampler.state_dict(),
@@ -206,7 +230,7 @@ def train():
                 'discriminator_optimizer_state_dict': d_optimizer.state_dict(),
             }, f'{cfg.chpt_path}checkpoint_epoch_{tot_epoch + 1}.pt')
 
-    Final_epoch = cfg.epoch#+epoch_chpt
+    Final_epoch = cfg.epoch + epoch_chpt
 
     # Save the final trained model
     torch.save({
