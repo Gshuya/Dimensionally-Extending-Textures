@@ -13,7 +13,7 @@ def sample_trilinear(noise, coords, img_h=128, img_w=128):
     :param coords: octave-transformed sampling positions [bs, n_octaves, 3, img_h*img_w]
     :param img_h: height of image to synthesize
     :param img_w: width of image to synthesize
-    :return: sampled noise octaves [bs, n_octaves, img_h, img_w]  ---> [bs, img_h, img_w, n_octaves]
+    :return: sampled noise octaves [bs, n_octaves, img_h, img_w]  
     """
     # input and output dimensions
     # print("coords.shape", coords.shape)
@@ -119,7 +119,7 @@ def sample_trilinear(noise, coords, img_h=128, img_w=128):
     c = c.view(bs, n_octaves, img_h, img_w)
     # print("c.shape:",c.shape)
     # noise in last dimension (NHWC)
-    c= c.permute(0, 2, 3, 1)
+    #c= c.permute(0, 2, 3, 1)
     # print("c.shape permuted:",c.shape)
     return c
 
@@ -145,21 +145,21 @@ class add_noise(nn.Module):
         t_out = t_in
         if self.n_octaves == 16:
             for i in range(4):
-                t_out = t_out + noise[:, :, :, self.layer_idx * 4 + i:self.layer_idx * 4 + i + 1] * \
-                        torch.reshape(self.per_octave_w16[i, :], [1, 1, 1, self.hidden_dim])
+                t_out = t_out + noise[:, self.layer_idx * 4 + i:self.layer_idx * 4 + i + 1, :, :] * torch.reshape(self.per_octave_w16[i, :], [1, self.hidden_dim, 1, 1])
         elif self.n_octaves == 32:
             for i in range(8):
-                t_out = t_out + noise[:, :, :, self.layer_idx * 8 + i:self.layer_idx * 8 + i + 1] * \
-                        torch.reshape(self.per_octave_w32[i, :], [1, 1, 1, self.hidden_dim])
+                t_out = t_out + noise[:, self.layer_idx * 8 + i:self.layer_idx * 8 + i + 1, :, : ] * torch.reshape(self.per_octave_w32[i, :], [1, self.hidden_dim, 1, 1])
         else:
             import sys
             sys.exit("oops, need n_octaves either 16 or 32!")
+        
+        #print("t_out.shape:",t_out.shape)
 
         return t_out
     
 
 
-class Sampler(torch.nn.Module):
+class Generator(torch.nn.Module):
 
     """
     MLP that maps 3D coordinate to an rgb texture value
@@ -174,7 +174,7 @@ class Sampler(torch.nn.Module):
     """
 
     def __init__(self, img_size=128, img_h=None, img_w=None, hidden_dim=128, n_octaves=16):
-        super(Sampler, self).__init__()
+        super(Generator, self).__init__()
 
         # Image size
         self.img_size = img_size
@@ -233,7 +233,7 @@ class Sampler(torch.nn.Module):
         # broadcast (constant per pixel and per sample)
         BatchSize = coords.shape[0]
         base = self.base.expand(BatchSize, -1, self.img_h, self.img_w)
-        base.retain_grad()
+        # base.retain_grad()
         # print(base.shape)
        
         # obtain octave sampling coordinates by transforming slice coordinates with octave matrices

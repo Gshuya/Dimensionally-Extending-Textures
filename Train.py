@@ -23,9 +23,8 @@ wandb.init(
     # track hyperparameters and run metadata
     config={
     "architecture": "GAN",
-    "dataset": "wood",
-    "DiscriminatorUpdates": "5",
-    "epochs": 35000-40000,
+    "dataset": "Marble2",
+    "DiscriminatorUpdates": "1"
     }
 )
 
@@ -56,7 +55,7 @@ def gradient_penalty(real_images, fake_images, discriminator):
 
 
 def gram_matrix(t):
-    einsum = torch.einsum('bijc,bijd->bcd', t, t)
+    einsum = torch.einsum('bcij,bdij->bcd', t, t)
     n_pix = t.size(1) * t.size(2)
     return einsum/n_pix
 
@@ -80,9 +79,11 @@ def get_batch_imgs(img):
     img_batch = []
     for i in range(cfg.batch_size):
         transform = transforms.Compose([
-            transforms.RandomCrop((cfg.img_size, cfg.img_size), pad_if_needed=True),
+            transforms.RandomCrop((cfg.img_size, cfg.img_size)),
             transforms.ToTensor(),
-            # transforms.Normalize([0.5], [0.5]) #normalized to [-1,1]
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.5)
+            #transforms.Normalize([0.5], [0.5]) #normalized to [-1,1]
         ])
         img_crop = transform(img)
         img_batch.append(torch.unsqueeze(img_crop, 0))
@@ -112,23 +113,23 @@ def train():
    
 
     # Initialize the models
-    sampler = Models.Sampler(img_size=cfg.img_size, hidden_dim=cfg.hidden_dim, n_octaves=cfg.n_octaves)
+    generator = Models.Generator(img_size=cfg.img_size, hidden_dim=cfg.hidden_dim, n_octaves=cfg.n_octaves)
     discriminator = Models.Discriminator(real_batch.shape)
 
 
     # Define the optimizer for each model
-    g_optimizer = optim.Adam(sampler.parameters(), lr=cfg.g_lr, betas=(0.5, 0.999))
+    g_optimizer = optim.Adam(generator.parameters(), lr=cfg.g_lr, betas=(0.5, 0.999))
     d_optimizer = optim.Adam(discriminator.parameters(), lr=cfg.d_lr, betas=(0.5, 0.999))
     
     # Move models to the selected device
-    sampler.to(device)
+    generator.to(device)
     discriminator.to(device)
 
     # Load checkpoint
     checkpoint = torch.load(cfg.chpt)
 
     # Load generator and discriminator states
-    sampler.load_state_dict(checkpoint['generator_state_dict'])
+    generator.load_state_dict(checkpoint['generator_state_dict'])
     discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
 
     # Load optimizer states
@@ -140,7 +141,7 @@ def train():
     
     # Training loop
     for epoch in range(cfg.epoch):
-         
+        real_batch = get_batch_imgs(training_img).to(device)
         """
         Train discriminator
         """
@@ -167,7 +168,7 @@ def train():
 
 
             # Generate fake images
-            fake_img = sampler(coords, noise_cube)
+            fake_img = generator(coords, noise_cube)
         
                 
             # Get logits
@@ -193,7 +194,7 @@ def train():
 
         
         # Generate fake images
-        fake_img = sampler(coords, noise_cube)
+        fake_img = generator(coords, noise_cube)
 
         logits_real, hiddenL_real = discriminator(real_batch)
         logits_fake, hiddenL_fake = discriminator(fake_img)
@@ -218,13 +219,13 @@ def train():
         # Log the losses
         wandb.log({"Generator Loss": g_loss, "Discriminator Loss": d_loss})
         # Log the weights
-        wandb.log({"Generator Weights": sampler.state_dict(), "Discriminator Weights": discriminator.state_dict()})
+        wandb.log({"Generator Weights": generator.state_dict(), "Discriminator Weights": discriminator.state_dict()})
 
         # Save the model at desired intervals
         if (epoch + 1) % 5000 == 0:
             torch.save({
                 'epoch': tot_epoch+1,
-                'generator_state_dict': sampler.state_dict(),
+                'generator_state_dict': generator.state_dict(),
                 'discriminator_state_dict': discriminator.state_dict(),
                 'generator_optimizer_state_dict': g_optimizer.state_dict(),
                 'discriminator_optimizer_state_dict': d_optimizer.state_dict(),
@@ -235,7 +236,7 @@ def train():
     # Save the final trained model
     torch.save({
         'epoch': Final_epoch,
-        'generator_state_dict': sampler.state_dict(),
+        'generator_state_dict': generator.state_dict(),
         'discriminator_state_dict': discriminator.state_dict(),
         'generator_optimizer_state_dict': g_optimizer.state_dict(),
         'discriminator_optimizer_state_dict': d_optimizer.state_dict(),
