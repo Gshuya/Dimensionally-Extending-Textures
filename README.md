@@ -1,11 +1,11 @@
 This repository contains the PyTorch implementation of the Dimensionally Extending Textures solution based on GramGAN. 
 
 # Results
-Some texture results are shown below. Training the model takes several days on a single NVIDIA GeForce RTX 4060 GPU and still not enough.
+Some texture results are shown below. Training the model takes several days on a single NVIDIA GeForce RTX 4060 GPU and still not enough since the quality of slice results is not very good.
 
 ## Wood texture exemplar
 
-<img src="./exemplars/wood2.jpg" alt="Alt text" width="218">
+<img src="./exemplars/wood2.jpg" alt="Alt text">
 
 ### 2D slices of the resulting 3D texture
 <img src="./results/wood.png" alt="Alt text">
@@ -15,7 +15,7 @@ Some texture results are shown below. Training the model takes several days on a
 <img src="./results/wood3d.png" alt="Alt text">
 
 ## Marble texture exemplar
-<img src="./exemplars/Marble.png" alt="Alt text" width="200">
+<img src="./exemplars/Marble.png" alt="Alt text">
 
 ### 2D slices of the resulting 3D texture
 <img src="./results/marble.png" alt="Alt text">
