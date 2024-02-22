@@ -4,12 +4,9 @@ import Config
 
 import torch
 import numpy as np
-import cv2
 from torchvision.utils import save_image
-#import matplotlib.pyplot as plt
 
-#import configuration
-cfg = Config.Config()
+
 
 """Inference"""
 
@@ -22,6 +19,7 @@ def inference():
         np.random.seed(cfg.seed)
         print("setting seed for reproducibility to " + str(cfg.seed))
 
+
     # Instantiate the generator
     generator = Models.Generator(img_size=cfg.img_size, img_h=cfg.img_h, img_w=cfg.img_w, hidden_dim=cfg.hidden_dim, n_octaves=cfg.n_octaves)
    
@@ -29,27 +27,31 @@ def inference():
     checkpoint = torch.load(cfg.model_name)
     # epoch = checkpoint['epoch']
     generator.load_state_dict(checkpoint['generator_state_dict'])
-    # print('loaded model from: ' + cfg.model_name)
     generator.to(device)
 
-    # Generate samples
+
+    # Generate images
     for i in range(cfg.num_samples):
-        # get random noise
-        slicing_matrix_ph = get_random_slicing_matrices(1, random=cfg.random) # single slice [1, 4, 4]
+        # get random slices
+        slicing_matrix_ph = get_random_slicing_matrices(4, random=cfg.random) 
         slicing_matrix_ph = torch.from_numpy(slicing_matrix_ph).float()
-        coords = meshgrid2D(cfg.img_h, cfg.img_w)  # [4, img_h*img_w]
-        coords = torch.matmul(slicing_matrix_ph, coords) # [1, 4, img_h*img_w]
+        coords = meshgrid2D(cfg.img_h, cfg.img_w)  
+        coords = torch.matmul(slicing_matrix_ph, coords)
         coords = coords[:, :3, :]   
         coords = coords.to(device)
-        # print("coords.shape:", coords.shape)
+        # Generate random noise
         noise_cube = torch.randn([cfg.n_octaves, cfg.noise_resolution, cfg.noise_resolution, cfg.noise_resolution])
         noise_cube = noise_cube.to(device)
       
+        # Generate images
         imgs = generator(coords,noise_cube)
-        # print(imgs.shape)
-
+    
         save_image(imgs, cfg.out_path + str(i+1) + '.png')
-        print('Image saved')
+        print('Image saved to: ' + cfg.out_path + str(i+1) + '.png')
   
+
+
 ################################
-inference()
+if __name__ == "__main__":
+    cfg = Config.Config()
+    inference()

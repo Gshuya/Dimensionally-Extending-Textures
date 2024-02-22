@@ -6,4 +6,4 @@ mi.set_variant('scalar_rgb')
 scene = mi.load_file('scenes/matpreview/scene.xml')
 # Render the scene
 img = mi.render(scene)
-mi.util.write_bitmap("3DRender/4.png", img)
+mi.util.write_bitmap("3DRender/wood.png", img)

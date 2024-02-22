@@ -59,7 +59,7 @@
         <!-- <rgb name="diffuse_reflectance" value="0.240, 0.771, 0.361" />
         <float name="int_ior" value="1.9" /> -->
         <texture type="bitmap" name="reflectance">
-            <string name="filename" value="exemplars/wood.jpg"/>
+            <string name="filename" value="results/wood.png"/>
         </texture>
     </bsdf>
 

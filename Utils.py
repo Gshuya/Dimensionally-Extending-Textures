@@ -42,7 +42,8 @@ def get_random_slicing_matrices(BatchSize, random=False):
         Rotate using random angles in [0, 90] and
         translate using random offsets in [-1, 1]
     """
-    matrices = np.zeros((BatchSize, 4, 4)) # 4x4 transformation matrix
+    # 4x4 transformation matrix
+    matrices = np.zeros((BatchSize, 4, 4)) 
     for i in range(BatchSize):
         if not random:
             # only rotate around x
@@ -54,7 +55,7 @@ def get_random_slicing_matrices(BatchSize, random=False):
             r = R.from_euler('xyz', angles, degrees=True)
 
         rot = np.identity(4, dtype=np.float32)
-        rot[:3, :3] = r.as_matrix() # rotation matrix DCM
+        rot[:3, :3] = r.as_matrix()
 
         # translate randomly in all 3 directions
         offset = np.random.uniform(low=-1., high=1., size=3)
@@ -70,17 +71,3 @@ def get_random_slicing_matrices(BatchSize, random=False):
 
 
 
-
-
-"""
-coords = meshgrid2D(128, 128) 
-print('coords.shape:', coords.shape) # [4, 16384]
-print('coords:', coords)
-slicing_matrix_ph = get_random_slicing_matrices(16)
-slicing_matrix_ph = torch.from_numpy(slicing_matrix_ph).float()
-print('slicing_matrix_ph.shape:', slicing_matrix_ph.shape) # [16, 4, 4]
-print('slicing_matrix_ph:', slicing_matrix_ph)
-coords = torch.matmul(slicing_matrix_ph, coords)
-print('coords.shape:', coords.shape) # [16, 4, 16384]
-print('coords:', coords)
-"""
